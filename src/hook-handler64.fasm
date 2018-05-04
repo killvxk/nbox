@@ -1,0 +1,10 @@
+
+format MS64 COFF
+
+extrn nbox_handle_hook
+
+public _fasm_hhandler
+
+_fasm_hhandler:
+    pushad
+    pushfd

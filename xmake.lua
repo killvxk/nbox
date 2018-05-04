@@ -19,17 +19,33 @@ if is_mode("release") then
 end
 
 -- add target
+target 'lua53'
+    set_kind 'shared'
+    add_files('src/lua53/*.c|lua.c|luac.c')
+    add_defines('LUA_BUILD_AS_DLL')
+
 target 'nbox'
     set_kind 'shared'
     set_targetdir '$(buildir)/$(mode)/$(arch)'
     add_files('src/*.cpp')
     add_includedirs('include')
+    add_includedirs('src')
     add_linkdirs('lib/$(arch)')
+    add_links('capstone_static.lib', 'hook-handler.obj')
 
 target 'test'
     set_kind 'binary'
     set_targetdir '$(buildir)/$(mode)/$(arch)'
     add_files('src/*.cpp', 'test/*.cpp')
+
+target 'fasmlib'
+    on_build(function(target)
+        local X = val('arch') == 'x86' and '32' or '64'
+        os.execv('fasm', {
+            'src/hook-handler' .. X .. '.fasm',
+            'lib/' .. val('arch') .. '/hook-handler.obj'
+        })
+    end)
 
 -- FAQ
 --
