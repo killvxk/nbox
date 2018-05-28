@@ -1,0 +1,31 @@
+
+format COFF
+
+extrn '_nbox_hook_handler@8' as nbox_hook_handler
+
+public Detour as '_fasm_hook_handler'
+
+Detour:
+    label RetAddr   dword at ebp + 24h
+
+    ; Store the thread's context
+    pushad
+    pushfd
+    mov ebp, esp
+    ; Call Hook-Handler
+    push ebp                ; Context
+    mov eax, [RetAddr]      ; Ret Address
+    sub eax, 5              ; Hook Address
+    push eax
+    ; call nbox_hook_handler, return the address of Trampoline[HookAddr]
+    mov eax, nbox_hook_handler
+    call eax
+    ; Restore the thread's context and Jump to Trampoline
+    mov [RetAddr], eax
+    popfd
+    popad
+    ret
+
+; Trampoline:
+;     ; do the original codes
+;     ; jump to next address of coverred codes

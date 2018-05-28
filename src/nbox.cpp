@@ -1,13 +1,25 @@
 
 #include "nbox.h"
 
+#pragma comment(lib, "DbgHelp.lib")
+
 namespace nbox
 {
 	using namespace std;
 
-	HANDLE hProcess = GetCurrentProcess();
+	HANDLE hProcess;
 	READ_MEMORY ReadMemory = (READ_MEMORY)::ReadProcessMemory;
 	WRITE_MEMORY WriteMemory = (WRITE_MEMORY)::WriteProcessMemory;
+
+    int init(HANDLE ps)
+    {
+        hProcess = ps;
+        SymInitialize(ps, nullptr, true);
+        SymSetOptions(SymGetOptions() | SYMOPT_UNDNAME);
+        return 0;
+    }
+
+    static int _ = init(GetCurrentProcess());
 
 	//int8_t readByte(uint8_t *addr) { return readValue<int8_t>(addr); }
 	//int16_t readShort(uint8_t *addr) { return readValue<int16_t>(addr); }
@@ -19,7 +31,7 @@ namespace nbox
 		return readValue(addr, ptr) ? ptr : nullptr;
 	}
 
-	string readString(uint8_t *addr)
+	string readString(void *addr)
 	{
 		const int BUFSIZE = 128;
 		char buf[BUFSIZE + 1] = { 0 };
@@ -36,35 +48,35 @@ namespace nbox
 		return ret;
 	}
 
-	string readBytes(uint8_t *addr, size_t len)
+	string readBytes(void *addr, size_t len)
 	{
 		string buf(len, 0); size_t nReaded;
 		return ReadMemory(hProcess, addr, (LPVOID)buf.c_str(), len, &nReaded) && nReaded == len ? buf : "";
 	}
-	bool readBytes(uint8_t *addr, void *pdata, size_t len)
+	bool readBytes(void *addr, void *pdata, size_t len)
 	{
 		size_t nReaded;
 		return ReadMemory(hProcess, addr, pdata, len, &nReaded) && nReaded == len;
 	}
 
-	uint8_t *readPtr(uint8_t *addr, const initializer_list<int>& offsets)
+	void *readPtr(void *addr, const initializer_list<int>& offsets)
 	{
 		auto ptr = addr;
 		for (auto offset : offsets)
 		{
 			if (!ptr) break;
-			ptr = readPtr(ptr + offset);
+			ptr = readPtr((uint8_t*)ptr + offset);
 		}
 		return ptr;
 	}
 
-	bool writeBytes(uint8_t *addr, const char *bytes, size_t len)
+	bool writeBytes(void *addr, const void *bytes, size_t len)
 	{
 		size_t nWritten;
 		return WriteMemory(hProcess, addr, bytes, len, &nWritten) && nWritten == len;
 	}
 
-	bool writeBytes(uint8_t *addr, const string& bytes)
+	bool writeBytes(void *addr, const string& bytes)
 	{
 		return writeBytes(addr, bytes.c_str(), bytes.size());
 	}
@@ -293,12 +305,98 @@ namespace nbox
 
 	void *getAddress(const char *lib, const char *func)
 	{
-		HMODULE base = nullptr;
-		enumModule(hProcess, [&](HMODULE hMod, const char *name) {
-			if (_stricmp(name, func) == 0)
-				return base = hMod, 0;
+		return getAddress((LPBYTE)getAddress(lib), func);
+	}
+
+	void *getAddress(const char *symbol)
+	{
+        SYMBOL_INFO si;
+        memset(&si, 0, sizeof(si));
+
+        si.SizeOfStruct = sizeof(si);
+
+        if (SymFromName(hProcess, symbol, &si))
+            return reinterpret_cast<void*>(si.Address);
+        else
+            puts(lastError().c_str());
+		return getModule(symbol).modBaseAddr;
+	}
+
+    string getSymbol(void *addr, uint64_t *dis)
+    {
+        char buf[sizeof(SYMBOL_INFO) + MAX_SYM_NAME] = { 0 };
+        auto sym = (SYMBOL_INFO*)buf;
+        sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+        sym->MaxNameLen = MAX_SYM_NAME;
+
+        DWORD64 DIS;
+        if (SymFromAddr(hProcess, (DWORD64)addr, dis ? dis : &DIS, sym))
+            return sym->Name;
+        else
+            return puts(lastError().c_str()), "";
+    }
+
+    vector<FrameInfo> backtrace(const CONTEXT *context)
+    {
+        STACKFRAME stack = { 0 };
+        stack.AddrPC.Offset = context->Eip;
+        stack.AddrPC.Mode = AddrModeFlat;
+        stack.AddrStack.Offset = context->Esp;
+        stack.AddrStack.Mode = AddrModeFlat;
+        stack.AddrFrame.Offset = context->Ebp;
+        stack.AddrFrame.Mode = AddrModeFlat;
+
+        vector<FrameInfo> v;
+
+        while (StackWalk(
+            IMAGE_FILE_MACHINE_I386, hProcess,
+            GetCurrentThread(), &stack, &context, NULL,
+            SymFunctionTableAccess, SymGetModuleBase, NULL))
+        {
+            FrameInfo finfo;
+            DWORD_PTR frame = stack.AddrPC.Offset;
+            finfo.retaddr = frame;
+            finfo.symbol = getSymbol((void*)frame, &finfo.sym_dis);
+            DWORD line_displacement = 0;
+            IMAGEHLP_LINE64 line = {};
+            line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+            if (SymGetLineFromAddr64(hProcess, frame, &line_displacement, &line))
+                finfo.file = line.FileName, finfo.line = line.LineNumber;
+            v.push_back(std::move(finfo));
+        }
+        return v;
+    }
+
+    vector<FrameInfo> backtrace()
+    {
+        CONTEXT context = { 0 };
+        RtlCaptureContext(&context);
+        return backtrace(&context);
+    }
+
+    void printBacktrace(const CONTEXT *context, ostream& out)
+    {
+        auto bt = context ? backtrace(context) : backtrace();
+
+        for (auto info : bt)
+        {
+            char buf[100];
+            sprintf(buf, "%p", info.retaddr);
+            out << buf;
+            if (info.symbol.size()) cout << '\t' << info.symbol;
+            if (info.file.size()) cout << '\t' << info.file << ':' << info.line;
+            out << endl;
+        }
+    }
+
+	MODULEENTRY32 getModule(const char *lib)
+	{
+		MODULEENTRY32 base = { 0 };
+		enumModule(GetProcessId(hProcess), [&](MODULEENTRY32 *me) {
+			if (_stricmp(me->szModule, lib) == 0)
+				return base = *me, 0;
 			return 1;
 		});
-		return base ? getAddress((LPBYTE)base, func) : nullptr;
+		return base;
 	}
 }

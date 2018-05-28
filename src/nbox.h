@@ -6,9 +6,11 @@
 #include <initializer_list>
 #include <functional>
 #include <vector>
+#include <iostream>
 
 #include <Windows.h>
 #include <TlHelp32.h>
+#include <DbgHelp.h>
 
 #pragma comment(lib, "Advapi32.lib")
 
@@ -34,35 +36,62 @@ namespace nbox
 		int begin, end;
 	};
 
+    struct FrameInfo
+    {
+        DWORD_PTR retaddr;
+        string symbol;
+        DWORD64 sym_dis;
+        string file;
+        DWORD line;
+    };
+
 	template<typename T>
-	bool readValue(uint8_t *addr, T& ret)
+	bool readValue(void *addr, T& ret)
 	{
 		size_t nReaded;
 		//return ReadMemory(hProcess, addr, (LPVOID)&ret, sizeof(ret), &nReaded) && nReaded == sizeof(T);
 		return ReadMemory(hProcess, addr, (LPVOID)&ret, sizeof(ret), &nReaded);
 	}
 
+    template<typename T>
+    vector<T> readArray(void *addr, size_t count)
+    {
+        vector<T> ret;
+        T tmp;
+        while (count && readValue(addr, tmp))
+            ret.push_back(tmp), --count, addr += sizeof(T);
+        return ret;
+    }
+
 	int8_t readByte(uint8_t *addr);
 	int16_t readShort(uint8_t *addr);
 	int32_t readInt(uint8_t *addr);
 	int64_t readLong(uint8_t *addr);
-	uint8_t *readPtr(uint8_t *addr);
-	uint8_t *readPtr(uint8_t *addr, const initializer_list<int>& offsets);
-	string readString(uint8_t *addr);
-	string readBytes(uint8_t *addr, size_t size);
+	void *readPtr(void *addr);
+	void *readPtr(void *addr, const initializer_list<int>& offsets);
+	string readString(void *addr);
+	string readBytes(void *addr, size_t size);
 	void enumPtrs(uint8_t *addr, const initializer_list<Range> ranges, function<void(uint8_t*, vector<int>&)>);
 	LPBYTE getAddress(LPBYTE lpMod, const char *func);
 	void *getAddress(const char *lib, const char *func);
+	void *getAddress(const char *lib);
+	MODULEENTRY32 getModule(const char *lib);
+
+    vector<FrameInfo> backtrace();
+    vector<FrameInfo> backtrace(const CONTEXT *context);
+    void printBacktrace(const CONTEXT *context = nullptr, ostream& out = std::cout);
+
+    string getSymbol(void *addr, uint64_t *dis = nullptr);
 
 	template<typename T>
-	bool writeValue(uint8_t *addr, T& val)
+	bool writeValue(void *addr, T& val)
 	{
 		size_t nWritten;
 		//return WriteMemory(hProcess, addr, &val, sizeof(T), &nWritten) && nWritten == sizeof(T);
 		return WriteMemory(hProcess, addr, &val, sizeof(T), &nWritten);
 	}
-	bool writeBytes(uint8_t *addr, const char *bytes, size_t len);
-	bool writeBytes(uint8_t *addr, const string& bytes);
+	bool writeBytes(void *addr, const void *bytes, size_t len);
+	bool writeBytes(void *addr, const string& bytes);
 
 	bool enablePrivilege(const char *priv, bool enable = true);
 	bool enableDebugPrivilege();
