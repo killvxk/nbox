@@ -163,8 +163,7 @@ LuaCallback *LuaState::NewCallback(int idcall) // 0,+1
 
 LuaCallback::LuaCallback(lua_State *L) : LuaState(L)
 {
-    pushthread(L);
-    m_ref = rref(); //记录到C注册表防止被回收
+    m_ref = ref(Reg, L); //记录到C注册表防止被回收
 }
 
 LuaCallback::~LuaCallback() { RegFreeRef(m_ref); }

@@ -96,19 +96,21 @@ namespace nbox
 	bool enablePrivilege(const char *priv, bool enable = true);
 	bool enableDebugPrivilege();
 
-	string errorString(int errcode);
+	string lastError(int errcode);
 	string lastError();
 
 	DWORD getPid(const string& name);
 	DWORD getPid(HWND hWnd);
+	DWORD getPid();
 
 	HANDLE openProcess(const string& name, DWORD access = PROCESS_ALL_ACCESS);
 	HANDLE openProcess(HWND hWnd, DWORD access = PROCESS_ALL_ACCESS);
 	HANDLE openProcess(DWORD pid, DWORD access = PROCESS_ALL_ACCESS);
 
 	int enumProcess(function<int(PROCESSENTRY32 *)> callback);
-	int enumModule(DWORD pid, function<int(MODULEENTRY32 *)> callback);
-	int enumModule(HANDLE hProc, function<int(HMODULE, const char*)> callback);
+	int enumModule(function<int(MODULEENTRY32 *)> callback, DWORD pid);
+	int enumModule(function<int(MODULEENTRY32 *)> callback);
+	int enumModule(function<int(HMODULE, const char*)> callback, HANDLE);
 
 	int inject(const string& szDllPath);
 }

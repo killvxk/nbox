@@ -327,16 +327,19 @@ int WorkThread()
     {
         g_ses.addmethod("loadScript", [](Session *ss, List& args) -> Value
         {
-            thread([](const char *file)
-            {
-                if (file && g_nblua.dofile(file))
+            auto file = (const char *)args[0];
+            thread([](const char *file) {
+                TmpState t(g_nblua);
+                //auto t = g_nblua.newthread();
+                //auto &t = g_nblua;
+                if (file && t.dofile(file))
                 {
-                    auto error = g_nblua.tostr();
-                    g_nblua.pop();
+                    auto error = t.tostr();
+                    t.pop();
 
-                    g_nblua.traceback(g_nblua, error);
-                    error = g_nblua.tostr();
-                    g_nblua.pop();
+                    t.traceback(t, error);
+                    error = t.tostr();
+                    t.pop();
                     g_ses.fnotify("viml#cexpr", error);
                 }
             }, (const char *)args[0]).detach();
@@ -442,7 +445,7 @@ int WorkThread()
             auto v = List::New();
             int count = args[0].isint() ? args[0].Int() : 0;
             int i = 0;
-            enumModule(GetCurrentProcessId(), [&](MODULEENTRY32 *me) {
+            enumModule([&](MODULEENTRY32 *me) {
                 v.list().push_back(NewDict(
                     "name", me->szModule,
                     "path", me->szExePath,

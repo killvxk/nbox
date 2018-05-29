@@ -25,7 +25,7 @@ public:
         if (!this->attach(port))
             return false;
 
-        auto api = request("nvim_get_api_info");
+        auto api = api_info();
         cout << "Channel-ID: " << api[0].Int() << endl;
         cout << fcall("ndbg#_start", role, api[0]) << endl;
         return true;
@@ -48,3 +48,5 @@ public:
         this->print(buf);
     }
 };
+
+extern NBoxSession g_ses;

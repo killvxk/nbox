@@ -34,7 +34,12 @@ public:
         int         value;
     } LUA_CONSTANT;
 
-    struct Index { Index(int v) { val = v; } int val; };
+    enum Index
+    {
+        i0 = 0, i1, i2, i3, i4, i5, i6, i7, i8,
+        Reg = LUA_REGISTRYINDEX,
+    };
+    enum NIL { Nil };
 
     // push...
     void pushvalue(int i) { lua_pushvalue(m_L, i); }
@@ -54,7 +59,8 @@ public:
     void push(lua_Number n) { lua_pushnumber(m_L, n); }
     void push(bool b) { lua_pushboolean(m_L, b); }
     void push(lua_CFunction f, int n = 0) { lua_pushcclosure(m_L, f, n); }
-    void push(Index i) { lua_pushvalue(m_L, i.val); }
+    void push(Index i) { lua_pushvalue(m_L, (int)i); }
+    void push(NIL _) { lua_pushnil(m_L); }
 
     void pushnil(void) { lua_pushnil(m_L); }
     const char *push(const char *s) { return lua_pushstring(m_L, s); }
@@ -199,12 +205,8 @@ public:
     {
         return luaL_newlibtable(m_L, l);
     }
-    LuaState newthread()
-    {
-        LuaState ret = lua_newthread(m_L);
-        ret.openlibs();
-        return ret;
-    }
+    // 0, +1
+    lua_State *newthread() { return lua_newthread(m_L); }
 
     // -1, 0
     void setfield(int i, const char *k) { lua_setfield(m_L, i, k); }
@@ -267,23 +269,29 @@ public:
         return luaL_getsubtable(m_L, idx, fname);
     }
 
-    // lua_State *  newthread(){ return lua_newthread(m_L); }
     int resume(lua_State *from, int nargs)
     {
         return lua_resume(m_L, from, nargs);
     }
     int yield(lua_State *L, int nargs) { return lua_yield(L, nargs); }
 
-    void traceback(lua_State *L, const char *msg = nullptr, int level = 0)
+    void traceback(lua_State *L, const char *msg = nullptr, int level = 1)
     {
         luaL_traceback(m_L, L, msg, level);
     }
 
-    void pop(int n = 1) { return lua_pop(m_L, n); }
+    LuaState& pop(int n = 1) { lua_pop(m_L, n); return *this; }
     int type(int i = -1) { return lua_type(m_L, i); }
     const char *type_name(int tp) { return lua_typename(m_L, tp); }
+
+    // -1, +0
     int ref(int t) { return luaL_ref(m_L, t); }
+    template<typename T>
+    int ref(int it, T t) { return push(t), ref(it); }
+
+    // 0, 0
     void unref(int t, int ref) { return luaL_unref(m_L, t, ref); }
+
     void rawseti(int t, int n) { return lua_rawseti(m_L, t, n); }
     int rawgeti(int t, int n) { return lua_rawgeti(m_L, t, n); }
     void rawset(int t) { return lua_rawset(m_L, t); }
@@ -329,10 +337,10 @@ public:
 
     // C Registry table
     // -1, 0
-    void rsetfield(const char *gname) { setfield(LUA_REGISTRYINDEX, gname); }
-    int rref() { return ref(LUA_REGISTRYINDEX); }
-    template<typename T>
-    int rref(T t) { return push(t), ref(LUA_REGISTRYINDEX); }
+    //void rsetfield(const char *gname) { setfield(LUA_REGISTRYINDEX, gname); }
+    //int rref() { return ref(LUA_REGISTRYINDEX); }
+    //template<typename T>
+    //int rref(T t) { return push(t), ref(LUA_REGISTRYINDEX); }
 
     // 0, +1
     int rget(int ref) { return rawgeti(LUA_REGISTRYINDEX, ref); }
@@ -365,6 +373,20 @@ public:
     {
         return lua_xmove(from, to, n);
     }
+};
+
+class TmpState : public LuaState
+{
+public:
+    TmpState(LuaState& G) : LuaState(G.newthread())
+    {
+        _ref = G.ref(Reg);
+        openlibs();
+    }
+    ~TmpState() { unref(Reg, _ref); }
+
+private:
+    int _ref;
 };
 
 class LuaCallback : public LuaState

@@ -81,6 +81,11 @@ namespace nbox
 		return writeBytes(addr, bytes.c_str(), bytes.size());
 	}
 
+    DWORD getPid()
+    {
+        return GetProcessId(hProcess);
+    }
+
 	DWORD getPid(const string& name)
 	{
 		DWORD pid = 0;
@@ -108,7 +113,7 @@ namespace nbox
 	}
 	HANDLE openProcess(DWORD pid, DWORD access) { return OpenProcess(access, FALSE, pid); }
 
-	string errorString(int errcode)
+	string lastError(int errcode)
 	{
         HLOCAL str; string ret;
         if (FormatMessage(
@@ -118,7 +123,7 @@ namespace nbox
         LocalFree(str);
         return ret;
 	}
-	string lastError() { return errorString(GetLastError()); }
+	string lastError() { return lastError(GetLastError()); }
 
 
 	bool enablePrivilege(const char *priv, bool enable)
@@ -162,7 +167,8 @@ namespace nbox
         CloseHandle(hSnap);
         return 1;
     }
-	int enumModule(DWORD pid, function<int(MODULEENTRY32 *)> callback)
+
+	int enumModule(function<int(MODULEENTRY32 *)> callback, DWORD pid)
 	{
         MODULEENTRY32 me32;
         me32.dwSize = sizeof(me32);
@@ -177,9 +183,14 @@ namespace nbox
         return 1;
 	}
 
+    int enumModule(function<int(MODULEENTRY32 *)> callback)
+    {
+        return enumModule(callback, getPid());
+    }
+
 #include <Psapi.h>
 
-	int enumModule(HANDLE hProc, function<int(HMODULE, const char*)> callback)
+	int enumModule(function<int(HMODULE, const char*)> callback, HANDLE hProc)
 	{
 		HMODULE hMods[1024]; DWORD cbNeeded;
 		if (!EnumProcessModules(hProc, hMods, sizeof(hMods), &cbNeeded))
@@ -392,11 +403,11 @@ namespace nbox
 	MODULEENTRY32 getModule(const char *lib)
 	{
 		MODULEENTRY32 base = { 0 };
-		enumModule(GetProcessId(hProcess), [&](MODULEENTRY32 *me) {
+		enumModule([&](MODULEENTRY32 *me) {
 			if (_stricmp(me->szModule, lib) == 0)
 				return base = *me, 0;
 			return 1;
-		});
+		}, getPid());
 		return base;
 	}
 }
