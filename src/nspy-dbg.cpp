@@ -1,6 +1,5 @@
 
 #include <assert.h>
-#include <unordered_map>
 
 #include "nbox.h"
 #include "nspy-lua.h"
@@ -15,6 +14,15 @@ static recursive_mutex g_veh_mutex;
 static unordered_map<void*, Breakpoint*> g_bps;
 
 unordered_set<Breakpoint*> Breakpoint::s_revert;
+
+vector<Breakpoint*> Breakpoint::Set()
+{
+    vector<Breakpoint*> vecs;
+    vecs.reserve(g_bps.size());
+    for (auto it : g_bps)
+        vecs.push_back(it.second);
+    return vecs;
+}
 
 Breakpoint *Breakpoint::Get(void *addr)
 {

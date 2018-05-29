@@ -3,6 +3,7 @@
 
 #include <Windows.h>
 #include <unordered_set>
+#include <unordered_map>
 #include <mutex>
 
 namespace nbox
@@ -14,6 +15,8 @@ namespace nbox
     {
         static Breakpoint *Add(void *addr, BrkptHandler h = nullptr, bool temp = false);
         static Breakpoint *Get(void *addr);
+        static vector<Breakpoint*> Set();
+
         static unordered_set<Breakpoint*> s_revert;
 
         int remove();

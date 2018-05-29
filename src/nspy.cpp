@@ -168,6 +168,7 @@ static Value getAssemblyView(size_t upcount = 0)
     for (auto height = 0; height < g_am.height; )
     {
         auto CODE = readBytes((uint8_t*)addr, 16);
+        if (CODE.empty()) break;
         if (bp) CODE[0] = bp->rawcode;
 
         auto insn = dis.Disasm(CODE.c_str(), CODE.size(), reinterpret_cast<size_t>(addr));
@@ -382,12 +383,32 @@ int WorkThread()
             return 0;
         });
 
-        g_ses.addmethod("addBreakpoint", [](Session *ss, List& args) -> Value
+        g_ses.addmethod("writeMemory", [](Session *ss, List& args) -> Value
         {
-            auto addr = args[0].isstr() ? getAddress(args[0]) : (void*)args[0];
-            auto ret = (bool)Breakpoint::Add(addr, nullptr);
-            updateAssemblyView();
-            return ret;
+            auto addr = (void*)args[0];
+            auto v = args[1];
+            if (v.islist())
+            {
+                string bytes(v.list().size(), 0);
+                for (int i = 0; i < v.list().size(); ++i)
+                    bytes[i] = (uint8_t)v.list()[i].Int();
+                return writeBytes(addr, bytes);
+            }
+            else if (v.isstr())
+            {
+                return writeBytes(addr, v.str().c_str(), v.str().size());
+            }
+        });
+
+        g_ses.addmethod("getBreakpoints", [](Session *ss, List& args) -> Value
+        {
+            auto bps = Breakpoint::Set();
+            auto v = List::New(bps.size());
+            for (auto bp : bps)
+            {
+                v.list().push_back(NewList(bp->address, bp->istemp()));
+            }
+            return v;
         });
 
         g_ses.addmethod("toggleBreakpoint", [](Session *ss, List& args) -> Value
