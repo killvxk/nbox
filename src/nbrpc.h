@@ -26,8 +26,9 @@ public:
             return false;
 
         auto api = api_info();
+        // TODO: output as debug string
         cout << "Channel-ID: " << api[0].Int() << endl;
-        cout << fcall("ndbg#_start", role, api[0]) << endl;
+        cout << "ndbg#_start: " << fcall("ndbg#_start", role, api[0]) << endl;
         return true;
     }
 

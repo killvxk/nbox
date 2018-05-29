@@ -82,11 +82,12 @@ namespace nbox
     extern "C" void fasm_hook_handler();
 
     extern "C"
-    void * __stdcall nbox_hook_handler(void *addr, const HookContext *context)
+    void * __stdcall nbox_hook_handler(void *addr, HookContext *context)
     {
         auto hookdata = g_hookmap[addr];
         assert(hookdata);
 
+        context->ESP += sizeof(void*);      // the real ESP, stack is pushed by the hook-call
         if (hookdata->handler)
             hookdata->handler(addr, context);
         else;

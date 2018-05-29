@@ -17,10 +17,23 @@ int g_refluabps;
 
 using namespace nbox;
 
+static void SetContext(LuaState& lua, CONTEXT *ct)
+{
+    lua.setglobal("EAX", (lua_Integer)ct->Eax);
+    lua.setglobal("EBX", (lua_Integer)ct->Ebx);
+    lua.setglobal("ECX", (lua_Integer)ct->Ecx);
+    lua.setglobal("EDX", (lua_Integer)ct->Edx);
+    lua.setglobal("EBP", (lua_Integer)ct->Ebp);
+    lua.setglobal("ESP", (lua_Integer)ct->Esp);
+    lua.setglobal("EDI", (lua_Integer)ct->Edi);
+    lua.setglobal("ESI", (lua_Integer)ct->Esi);
+    lua.setglobal("EFLAGS", (lua_Integer)ct->EFlags);
+}
+
 static bool HandleLuaBreakpoint(EXCEPTION_POINTERS *E)
 {
     TmpState t(g_nblua);
-    t.rget(g_refluahook); assert(!t.isnil());
+    t.rget(g_refluabps); assert(!t.isnil());
     {
         // find corresponding handler
         t.get((lua_Integer)E->ExceptionRecord->ExceptionAddress);
@@ -30,6 +43,7 @@ static bool HandleLuaBreakpoint(EXCEPTION_POINTERS *E)
             t.getglobal("OnBreakpoint");
             if (t.isnil()) return false;
         }
+        SetContext(t, E->ContextRecord);
         // call lua handler
         t.push((lua_Integer)E->ExceptionRecord->ExceptionAddress);
         t.pcall(1, 1);
@@ -37,25 +51,27 @@ static bool HandleLuaBreakpoint(EXCEPTION_POINTERS *E)
     }
 }
 
-static void HandleLuaHook(void *addr, const HookContext *ct)
+static void HandleLuaHook(void *addr, const HookContext *ht)
 {
     TmpState t(g_nblua);
     t.rget(g_refluahook); assert(!t.isnil());
     {
         t.get((lua_Integer)addr);
-        assert(!t.isnil());
+        assert(t.isfunc());
 
-        t.newtable(0, 9);
-        t.set("EAX", ct->EAX);
-        t.set("EBX", ct->EBX);
-        t.set("ECX", ct->ECX);
-        t.set("EDX", ct->EDX);
-        t.set("EBP", ct->EBP);
-        t.set("ESP", ct->ESP);
-        t.set("EDI", ct->EDI);
-        t.set("ESI", ct->ESI);
-        t.set("EFLAGS", ct->EFLAGS);
+        CONTEXT ct;
+        ct.Eax = ht->EAX;
+        ct.Ebx = ht->EBX;
+        ct.Ecx = ht->ECX;
+        ct.Edx = ht->EDX;
+        ct.Ebp = ht->EBP;
+        ct.Esp = ht->ESP;
+        ct.Edi = ht->EDI;
+        ct.Esi = ht->ESI;
+        ct.EFlags = ht->EFLAGS;
+        SetContext(t, &ct);
 
+        t.push((lua_Integer)addr);
         t.pcall(1, 0);
     }
 }
@@ -257,6 +273,8 @@ NBoxLua::NBoxLua() : LuaState(LuaState::newstate())
         if (bp) bp->remove();
         return 0;
     });
+
+    // get breakpoint
 
     setglobal("LOG", [](lua_State *L)
     {

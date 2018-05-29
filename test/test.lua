@@ -12,19 +12,21 @@ function printx(...)
     return print(table.unpack(args))
 end
 
+local function onMsgBox(addr)
+    printx('ESP', ESP)
+    local pCaption = readPtr(ESP + 0xC)
+    printx('pCaption', pCaption)
+    local caption = readString(pCaption)
+    printx('caption', caption)
+end
+
 print('---------start---------')
 
 printx('MessageBoxA', getAddress 'USER32!MessageBoxA')
 local CreateFile = getAddress('CreateFileA')
 printx('CreateFile', CreateFile, type(CreateFile))
 
-printx('setHook', setHook('USER32!MessageBoxA', function(ct)
-    printx('ESP', ct.ESP)
-    local ppStr = readPointer(ct.ESP + 0xC)
-    printx('ppStr', ppStr)
-    local Arg2 = readString(ppStr)
-    printx('Arg2', Arg2)
-end))
+print('setHook', setHook('USER32!MessageBoxA', onMsgBox))
 TEST()
 
 print('----------------------')
@@ -32,10 +34,9 @@ print('removeHook', removeHook('USER32!MessageBoxA'))
 TEST()
 
 print('----------------------')
-print('addBreakpoint', addBreakpoint('USER32!MessageBoxA', function(addr)
-    print('Breakpoint occured')
-end))
+print('addBreakpoint', addBreakpoint('USER32!MessageBoxA', onMsgBox))
+TEST()
 
 print('----------------------')
-removeBreakpoint('USER32!MessageBoxA')
+print('removeBreakpoint', removeBreakpoint('USER32!MessageBoxA'))
 TEST()

@@ -460,6 +460,12 @@ int WorkThread()
             return v;
         });
 
+        g_ses.addmethod("heartBeat", [](Session *ss, List& args) -> Value
+        {
+            // g_ses.notify("nvim_command", "let g:ndbg#hbc += 1");
+            return 1;
+        });
+
         g_ses.addmethod("log", [](Session *ss, List& args) -> Value
         {
             cout << "log: " << args << endl;
@@ -492,7 +498,12 @@ int WorkThread()
     thread([]()
     {
         printf("Loop Thread: %d\n", GetCurrentThreadId());
-        g_ses.loop();
+        while (g_ses.notify("heartBeat"))
+        {
+            g_ses.handle_recv(500);
+        }
+        // Temp, TODO:
+        ExitProcess(0);
     }).detach();
 }
 
